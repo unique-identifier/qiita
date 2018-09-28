@@ -11,7 +11,7 @@ from __future__ import division
 from unittest import TestCase, main
 
 from qiita_core.util import (
-    send_email, qiita_test_checker, execute_as_transaction, get_qiita_version,
+    send_email, read_last_email_to_admin, qiita_test_checker, execute_as_transaction, get_qiita_version,
     is_test_environment, get_release_info)
 from qiita_db.meta_util import generate_biom_and_metadata_release
 import qiita_db as qdb
@@ -21,7 +21,8 @@ class UtilTests(TestCase):
     def test_send_email(self):
         # TODO: issue 1639
         # figure out how to test sending emails
-        pass
+        self.assertTrue(read_last_email_to_admin('do.not.test.meeh@gmail.com',
+            'do.not.test.meeh@gmail.com', 'My subject line', 30, 'This is my message.'))
 
     def test_send_email_fail(self):
         """testing send email functionality"""
