@@ -20,6 +20,68 @@ with standard_library.hooks():
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
+from time import time, mktime
+from imaplib import IMAP4_SSL
+from email import message_from_string
+from email.utils import parsedate
+
+
+def read_last_email_to_admin(sent_from, sent_to, subject, age_threshold, message_text):
+    #TODO: may need a non_SSL option
+    #TODO: going to need IMAP environment variables for this thing
+    #qiita_config.smtp_host, qiita_config.smtp_port
+    mail = IMAP4_SSL('imap.gmail.com')
+    mail.login('do.not.test.meeh@gmail.com','password')
+    mail.select('inbox')
+
+    #fetch and search both return tuples, with the first value
+    #being a text status message ('OK') and the second value
+    #being the result value. Ignore status and take value,
+    #assuming true errors will return Exceptions.
+    latest_email_index = mail.search(None, 'ALL')[1][0][-1]
+    results = mail.fetch(latest_email_index, '(RFC822)')[1][0][1]
+
+    msg = message_from_string(results)
+
+    error_list = []
+
+    if msg['from'] != sent_from:
+        error_list.append("sender does not match (%s != %s)" %
+                (msg['from'], sent_from))
+    if msg['to'] != sent_to:
+        error_list.append("recipient does not match (%s != %s)" %
+                (msg['to'], sent_to))
+    if msg['subject'] != subject:
+        error_list.append("subject lines do not match (%s != %s)" %
+                (msg['subject'], subject))
+
+    #calculate difference in time from when the last message was sent
+    #until now, in hours. If time exceeds threshold, accumulate an
+    #error message.
+    delta = time() - mktime(parsedate(msg['date']))
+    delta = delta / (60.0 ** 2)
+    if delta > age_threshold:
+        error_list.append("Message is too old (%f hours)." % delta)
+
+    message_body = None
+
+    if msg.is_multipart():
+        for payload in msg.get_payload():
+            if payload.get_content_type() == 'text/plain':
+                message_body = payload.get_payload()
+                break
+    else:
+        message_body = msg.get_payload()
+
+    if message_body != message_text:
+        error_list.append("message bodies do not match (%s != %s)" %
+                (message_body, message_text))
+
+    if message_body:
+        return False, message_body
+
+    return True
+
 
 def send_email(to, subject, body):
     # create email
@@ -53,7 +115,6 @@ def send_email(to, subject, body):
         raise RuntimeError("Can't send email!")
     finally:
         smtp.close()
-
 
 def is_test_environment():
     """Checks if Qiita is running in a test environment
